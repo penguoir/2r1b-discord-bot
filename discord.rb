@@ -1,6 +1,10 @@
+require 'dotenv'
+Dotenv.load
+
 require './lib/role'
 require 'discordrb'
 require 'byebug'
+require 'concurrent'
 
 class Discordrb::User
   attr_accessor :role
@@ -9,7 +13,7 @@ end
 ##
 # Constants
 
-TOKEN = 'Nzc1NzE4MTEwNjg2MDg1MTQx.X6qZyQ.tQIg_zweHBnPRhqwZnCDFe4j-gM'
+TOKEN = ENV['DISCORD_TOKEN']
 ROLES = [
   Role.new('President', 'blue', 'Stay away from the bomber'),
   Role.new('Bomber', 'red', 'Be in the same room as the president'),
@@ -89,6 +93,7 @@ end
 
 ##
 # Remove all players
+
 bot.command :clear do |event|
   return "can't clear, game has started" if is_game_started
   joined_users.clear
@@ -133,6 +138,37 @@ bot.command :end_of_game do |event, *args|
   nil
 end
 
+def start_timer(duration, channel)
+  Thread.new {
+    sleep duration
+    channel.send_message("--- **Timer for #{duration/60} minutes is over!!** ---")
+  }
+end
+
+timer = nil
+
+##
+# Start a timer of (arg) minutes
+
+bot.command :timer do |event, *args|
+  return ":x: no duration specified" unless args.first
+  duration = args.first.to_f
+
+  timer = start_timer(duration * 60, event.channel)
+
+  "starting a timer for #{duration} minutes"
+end
+
+bot.command :stop_timer do |event|
+  return "no timer set." if timer.nil?
+
+  if timer.kill
+    "stopped the timer"
+  else
+    "couldn't stop the timer??? what's going on???"
+  end
+end
+
 
 ##
 # Start the game
@@ -158,9 +194,17 @@ bot.command :start do |event|
     u.pm(role.to_s)
   end
 
-  ":rocket: Started the game! I've DM'd #{joined_users.size} players their"\
+  # Split into teams
+  half = joined_users.size/2.to_f
+
+  room_a = joined_users.sample(half.ceil)
+  room_b = joined_users - room_a
+
+  ":rocket: Started the game! I've DM\'d #{joined_users.size} players their"\
   " roles. Use `/show @user#1234` and `/swap @user#1234` to show or swap"\
-  " cards with a user. glhf"
+  " cards with a user. \n\n"\
+  " **Room A**: #{room_a.map { |u| u.name }.join(', ')}\n"\
+  " **Room B**: #{room_b.map { |u| u.name }.join(', ')}"
 end
 
 
